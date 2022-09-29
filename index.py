@@ -3,6 +3,9 @@ from datetime import datetime
 import time
 import sqlite3 as sq
 import sqlite3
+import asyncio
+import os
+import threading
 from datetime import date
 from aiogram import Bot, Dispatcher, executor, types
 from aiogram.dispatcher.filters import Text
@@ -19,6 +22,7 @@ storage = MemoryStorage()
 bot = Bot(token="5613305399:AAFp9Cjwa6cQbvjw-rMOjwkCtExyJeLXe5g")
 
 dp = Dispatcher(bot,storage=storage)
+#dp2= Dispatcher(bot,storage=storage)
 
 # Включаем логирование, чтобы не пропустить важные сообщения
 logging.basicConfig(level=logging.INFO)
@@ -26,42 +30,18 @@ logging.basicConfig(level=logging.INFO)
 
 ID = '398909147'
 
-async def on_startup(_):
-    print('Бот вышел в онлайн')
-    global base, cur
-    base = sq.connect('main.db')
-    cur = base.cursor()
-    time = 0.1
-    if base:
-        print('Data base connected OK!')
-    base.execute(
-            "CREATE TABLE IF NOT EXISTS info(id INTEGER, datatime REAL, name TEXT, phone INTEGER,PRIMARY KEY(id AUTOINCREMENT))")
-    [var_last,] = cur.execute('SELECT max(id) FROM info').fetchone()
-    print(f"var_last = {var_last}")
-    base.commit()
-    while True:
-        base = sq.connect('main.db')
-        cur = base.cursor()
-        [var_max,] = cur.execute('SELECT max(id) FROM info').fetchone()
-        base.commit()
-        print(f"var_max = {var_max}")
-
-
-
-        if var_last!=var_max:
-            [var_new,] = cur.execute("SELECT datatime,name,phone FROM info WHERE id = ?",(var_max,))
-            base.commit()
-            print("True")
-            await bot.send_message(ID,f"Строка с id = {var_max}\ndatatime = {var_new[0]}\nname = {var_new[1]}\nphone = {var_new[2]}")
-            var_last = var_max
-        else:
-            print("False")
-        sleep(time * 60)
 
 
 
 @dp.message_handler(commands='add')
 async def add_func(message: types.Message):
+    global base, cur
+    base = sq.connect('main.db')
+    cur = base.cursor()
+    if base:
+        print('Data base connected OK!')
+        base.execute("CREATE TABLE IF NOT EXISTS info(id INTEGER, datatime REAL, name TEXT, phone INTEGER,PRIMARY KEY(id AUTOINCREMENT))")
+
     string1 = message.text
     string2 = string1[:0]+string1[4:]
     string2 = string2.strip()
@@ -108,12 +88,55 @@ async def sel_func(message: types.Message):
 
 @dp.message_handler(commands='help')
 async def help_func(message: types.Message):
-    await bot.send_message(message.chat.id,
+    await bot.send_message(ID,
                            f"Для того, чтобы добавить новую запись в бд используйте команду /add - далее ставите пробел и перечисляете дату,имя и номер телефона через <<;>> Пример - /add 01-01-2022;Иван;8918000000\n"
                            f"Для того, чтобы удалить запись из бд используйте команду /del - ставите пробел и пишите id. Пример - /del 5\n"
                            f"Для того, чтобы посмотреть нужную строчку из бд - используйте команду /sel - ставите пробел и пишите id. Пример - /sel 5")
 
 
 
+async def main():
+    #executor.start_polling(dispatcher=dp2)
+    print('Бот вышел в онлайн')
+    global base1, cur1
+    base1 = sq.connect('main.db')
+    cur1 = base1.cursor()
+    time = 0.1
+    # if base:
+    #     print('Data base connected OK!')
+    # base.execute(
+    #     "CREATE TABLE IF NOT EXISTS info(id INTEGER, datatime REAL, name TEXT, phone INTEGER,PRIMARY KEY(id AUTOINCREMENT))")
+    [var_last, ] = cur1.execute('SELECT max(id) FROM info').fetchone()
+    print(f"var_last = {var_last}")
+    base1.commit()
+    looptime = asyncio.get_running_loop()
+    end_time = loop.time() + 5.0
+    while True:
+
+        base1 = sq.connect('main.db')
+        cur1 = base1.cursor()
+        [var_max, ] = cur1.execute('SELECT max(id) FROM info').fetchone()
+        base1.commit()
+        print(f"var_max = {var_max}")
+
+        if var_last != var_max:
+            [var_new, ] = cur1.execute("SELECT datatime,name,phone FROM info WHERE id = ?", (var_max,))
+            base1.commit()
+            print("True")
+            await bot.send_message(ID,
+                                   f"Строка с id = {var_max}\ndatatime = {var_new[0]}\nname = {var_new[1]}\nphone = {var_new[2]}")
+            var_last = var_max
+        else:
+            print("False")
+
+        await asyncio.sleep(5)
+        print("SLEEEEP")
+
+
+
 if __name__ == '__main__':
-    executor.start_polling(dp, skip_updates=True, on_startup=on_startup)
+    loop = asyncio.get_event_loop()
+    loop.create_task(main())
+    executor.start_polling(dp)
+
+
